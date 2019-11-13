@@ -98,8 +98,8 @@ int main()
   std::random_device rd;  //Will be used to obtain a seed for the random number engine
 
   std::mt19937 rng(rd()); //Standard mersenne_twister_engine seeded with rd()
-  rng.seed(time(nullptr));
-
+  //rng.seed(time(nullptr));
+  rng.seed(1234);
   std::uniform_int_distribution<unsigned int> imageWRange(2,width-2);
   std::uniform_int_distribution<unsigned int> imageHRange(2,height-2);
   std::uniform_int_distribution<int> walkDirection(-1,1);
@@ -135,56 +135,55 @@ int main()
 	// now we loop until the quit flag is set to true
 	while(!quit)
 	{
-
-
     bool walking=true;
     walker.m_x=imageWRange(rng);
     walker.m_y=imageWRange(rng);
 
     while(walking && !pause)
     {
-
       // else move to a new point
-      walker.m_x+=walkDirection(rng);
-      walker.m_y+=walkDirection(rng);
-      setPixel(walker.m_x,walker.m_y,255,0,0);
 
       if(walker.m_x == 0 || walker.m_x == width-1 ||
          walker.m_y == 0 || walker.m_y == height-1 )
       {
-          //std::cout<<"outside exiting\n";
           walking=false;
-          break;
-      }
+          goto FinishedWalking; // this will exit the loop
+      }// check bounds.
 
 
     // see if we have a hit
     for(int y=-1; y<=1; ++y )
     {
-        for(int x=-1; x<=1; ++x)
-        {
-            getPixel(walker.m_x+x,walker.m_y+y);
-            if(r==0)
-            {
-                //std::cout<<"found position "<<walker.m_x<<' '<<walker.m_y<<'\n';
-                setPixel(walker.m_x,walker.m_y,0,0,0);
-                for(unsigned int y=0; y<height; ++y)
+      for(int x=-1; x<=1; ++x)
+      {
+          getPixel(walker.m_x+x,walker.m_y+y);
+          if(r==0)
+          {
+              // were adjacent so set the pixel to black
+              setPixel(walker.m_x,walker.m_y,0,0,0);
+              // clear the red pixels
+              for(unsigned int y=0; y<height; ++y)
+              {
+                for(unsigned int x=0; x<height; ++x)
                 {
-                  for(unsigned int x=0; x<height; ++x)
-                  {
-                      getPixel(x,y);
-                      if(r == 255)
-                        setPixel(x,y,255,255,255);
-                   }
+                    getPixel(x,y);
+                    if(r == 255)
+                      setPixel(x,y,255,255,255);
                  }
+               }// end clear red
+              walking=false;
+              goto FinishedWalking;
+          }// end if black
+      }// end x loop
+    } // end y loop
+    // draw current pixel
+    setPixel(walker.m_x,walker.m_y,255,0,0);
+    // update walker dir
+    walker.m_x+=walkDirection(rng);
+    walker.m_y+=walkDirection(rng);
+    } // end while walking
+  FinishedWalking : ;
 
-                walking=false;
-                break;
-            }
-        }
-    }
-
-    }
     // draw
     for(unsigned int y=0; y<height; ++y)
     {
@@ -195,8 +194,8 @@ int main()
           SDL_RenderDrawPoint(renderer,x,y);
        }
      }
-		// finally we need to tell SDL to update the screen
-		SDL_RenderPresent(renderer);
+    // finally we need to tell SDL to update the screen
+    SDL_RenderPresent(renderer);
 
 		// process SDL events, in this case we are looking for keys
 		while ( SDL_PollEvent(&event) )
