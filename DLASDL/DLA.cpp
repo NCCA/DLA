@@ -75,6 +75,7 @@ int main()
 	{
 		SDLErrorExit("error creating renderer");
 	}
+  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height);
 
 	clearScreen(renderer,0,0,0);
 	SDL_RenderPresent(renderer);
@@ -99,18 +100,16 @@ int main()
   std::random_device rd;  //Will be used to obtain a seed for the random number engine
 
   std::mt19937 rng(rd()); //Standard mersenne_twister_engine seeded with rd()
-  //rng.seed(time(nullptr));
-  rng.seed(1234);
+  rng.seed(time(nullptr));
+  //rng.seed(1234);
   std::uniform_int_distribution<unsigned int> imageWRange(2,width-2);
   std::uniform_int_distribution<unsigned int> imageHRange(2,height-2);
   std::uniform_int_distribution<int> walkDirection(-1,1);
 
-  for(unsigned int y=0; y<height; ++y)
+  for(unsigned int i=0; i<width*height; ++i)
   {
-    for(unsigned int x=0; x<height; ++x)
-    {
-      setPixel(x,y,255,255,255);
-    }
+      map[i].set(255,255,255,255);
+
   }
 
 
@@ -127,9 +126,13 @@ int main()
   setPixel(sX,sY,0,0,0);
   std::cout<<"Seed Pixel "<<sX<<' '<<sY<<'\n';
   }
+/*
+  for(int i=0; i<width; ++i)
+  {
 
-
-
+  setPixel(i,height/2,0,0,0);
+  }
+*/
   SDL_Event event;
 	bool quit=false;
   bool pause=false;
@@ -163,15 +166,11 @@ int main()
               // were adjacent so set the pixel to black
               setPixel(walker.m_x,walker.m_y,0,0,0);
               // clear the red pixels
-              for(unsigned int y=0; y<height; ++y)
-              {
-                for(unsigned int x=0; x<height; ++x)
+                for(unsigned int cr=0; cr<width*height; ++cr)
                 {
-                    getPixel(x,y);
-                    if(r == 255)
-                      setPixel(x,y,255,255,255);
+                    if(map[cr].red() == 255)
+                      map[cr].set(255,255,255,255);
                  }
-               }// end clear red
               walking=false;
               goto FinishedWalking;
           }// end if black
@@ -180,21 +179,21 @@ int main()
     // draw current pixel
     setPixel(walker.m_x,walker.m_y,255,0,0);
     // update walker dir
-    walker.m_x+=walkDirection(rng);
-    walker.m_y+=walkDirection(rng);
-    } // end while walking
-  FinishedWalking : ;
+      walker.m_x+=walkDirection(rng);
+      walker.m_y+=walkDirection(rng);
 
-    // draw
-    for(unsigned int y=0; y<height; ++y)
-    {
-      for(unsigned int x=0; x<height; ++x)
-      {
-          getPixel(x,y);
-          SDL_SetRenderDrawColor(renderer, r,g,b,255);
-          SDL_RenderDrawPoint(renderer,x,y);
-       }
-     }
+//    SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
+//    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+
+//    // finally we need to tell SDL to update the screen
+//    SDL_RenderPresent(renderer);
+//    SDL_PollEvent(&event);
+    } // end while walking
+
+  FinishedWalking : ;
+    SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+
     // finally we need to tell SDL to update the screen
     SDL_RenderPresent(renderer);
 
@@ -215,13 +214,10 @@ int main()
 						case SDLK_ESCAPE :  quit = true; break;
             case SDLK_SPACE : pause^=true; break;
             default : break;
-					}
-				}
-
-				default : break;
-			}
+          }// key
+        } // end key down
+      } // end process event
 		}
-
 	} // end processing loop
 
 	// finally when we are done we need to tidy up SDL by calling SDL_Quit
