@@ -13,6 +13,7 @@ to compile the program
 #include <iostream>
 #include <memory>
 #include <random>
+#include "RGBA.h"
 
 struct Vec2
 {
