@@ -44,7 +44,7 @@ unsigned char RGBA::blue() const noexcept
 
 unsigned char RGBA::alpha()const noexcept
 {
-  return (pixel & 0x000000FF);
+  return (pixel & 0x000000FF  );
 }
 
 

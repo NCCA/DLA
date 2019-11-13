@@ -78,21 +78,21 @@ int main()
 
 	clearScreen(renderer,0,0,0);
 	SDL_RenderPresent(renderer);
-  std::unique_ptr<unsigned char []> map=std::make_unique<unsigned char []>(width*height*3);
+//  std::unique_ptr<unsigned char []> map=std::make_unique<unsigned char []>(width*height*3);
+  std::unique_ptr<RGBA []> map=std::make_unique<RGBA []>(width*height);
+
   auto setPixel=[&map](unsigned int _x, unsigned int _y, unsigned char _r,
       unsigned char _g, unsigned  char _b){
-    size_t index=(width *3*_y)+3*_x;
-        map[index]=_r;
-        map[index+1]=_g;
-        map[index+2]=_b;
+    size_t index=(width *_y)+_x;
+    map[index].set(_r,_g,_b,255);
 
   };
   unsigned char r,g,b;
   auto getPixel=[&map,&r,&g,&b](unsigned int _x, unsigned int _y){
-    size_t index=(width *3*_y)+3*_x;
-    r=map[index];
-    g=map[index+1];
-    b=map[index+2];
+    size_t index=(width *_y)+_x;
+    r=map[index].red();
+    g=map[index].green();
+    b=map[index].blue();
 
   };
 
