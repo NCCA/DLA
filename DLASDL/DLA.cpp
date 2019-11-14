@@ -13,6 +13,9 @@ to compile the program
 #include <iostream>
 #include <memory>
 #include <random>
+#ifdef USEOMP
+  #include <omp.h>
+#endif
 #include "RGBA.h"
 
 struct Vec2
@@ -112,7 +115,10 @@ int main()
 
   }
 
-
+#ifdef USEOMP
+  omp_lock_t writelock;
+  omp_init_lock(&writelock);
+#endif
   Vec2 walker;
   // set initial walker position
   walker.m_x=imageWRange(rng);
@@ -136,10 +142,17 @@ int main()
   SDL_Event event;
 	bool quit=false;
   bool pause=false;
+
 	// now we loop until the quit flag is set to true
 	while(!quit)
 	{
     bool walking=true;
+#ifdef USEOMP
+  #pragma omp parallel for schedule(dynamic, 1) private(walker,r,walking)
+  for(int t=0; t<1; ++t)
+  {
+#endif
+    walking=true;
     walker.m_x=imageWRange(rng);
     walker.m_y=imageWRange(rng);
 
@@ -164,8 +177,15 @@ int main()
           if(r==0)
           {
               // were adjacent so set the pixel to black
-              setPixel(walker.m_x,walker.m_y,0,0,0);
-              // clear the red pixels
+#ifdef USEOMP
+            omp_set_lock(&writelock);
+#endif
+            setPixel(walker.m_x,walker.m_y,0,0,0);
+#ifdef USEOMP
+            omp_unset_lock(&writelock);
+#endif
+
+            // clear the red pixels
                 for(unsigned int cr=0; cr<width*height; ++cr)
                 {
                     if(map[cr].red() == 255)
@@ -189,8 +209,16 @@ int main()
 //    SDL_RenderPresent(renderer);
 //    SDL_PollEvent(&event);
     } // end while walking
+FinishedWalking :
+    walking=true;
+    walker.m_x=imageWRange(rng);
+    walker.m_y=imageWRange(rng);
 
-  FinishedWalking : ;
+
+#ifdef USEOMP
+
+}
+#endif
     SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 
@@ -219,6 +247,9 @@ int main()
       } // end process event
 		}
 	} // end processing loop
+#ifdef USEOMP
+  omp_destroy_lock(&writelock);
+#endif
 
 	// finally when we are done we need to tidy up SDL by calling SDL_Quit
 	// sometime this is added as the atexit function to make it happen

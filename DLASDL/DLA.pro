@@ -7,6 +7,8 @@ CONFIG-=app_bundle
 DESTDIR=./
 SOURCES=DLA.cpp
 HEADERS=RGBA.h
+QMAKE_CXXFLAGS+=-fopenmp
+QMAKE_LFLAGS+= -fopenmp -lpthread
 
 QMAKE_CXXFLAGS+=$$system(sdl2-config  --cflags)
 message(output from sdl2-config --cflags added to CXXFLAGS= $$QMAKE_CXXFLAGS)
