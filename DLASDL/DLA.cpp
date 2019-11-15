@@ -13,6 +13,9 @@ to compile the program
 #include <iostream>
 #include <memory>
 #include <random>
+#include <string>
+#include <OpenImageIO/imageio.h>
+
 #ifdef USEOMP
   #include <omp.h>
 #endif
@@ -32,21 +35,13 @@ const int width = 800;
 //-----------------------------------------------------------------------------
 const int height = 800;
 
-//-----------------------------------------------------------------------------
-/// @brief simple SDL clear screen function
-/// @param [in] _screen a pointer to the SDL screen structure
-/// @param [in] _r the red component for the clear colour 0-255
-/// @param [in] _g the green component for the clear colour 0-255
-/// @param [in] _b the blue component for the clear colour 0-255
-//-----------------------------------------------------------------------------
-void clearScreen(SDL_Renderer *_ren,char _r,char _g,char _b);
 
 //-----------------------------------------------------------------------------
 /// @brief function to quit SDL with error message
 /// @param[in] _msg the error message to send
 //-----------------------------------------------------------------------------
 void SDLErrorExit(const std::string &_msg);
-
+bool writeImage(const std::string &_fname, int _w, int _h,void *pixels);
 
 int main()
 {
@@ -80,7 +75,6 @@ int main()
 	}
   auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height);
 
-	clearScreen(renderer,0,0,0);
 	SDL_RenderPresent(renderer);
 //  std::unique_ptr<unsigned char []> map=std::make_unique<unsigned char []>(width*height*3);
   std::unique_ptr<RGBA []> map=std::make_unique<RGBA []>(width*height);
@@ -103,22 +97,15 @@ int main()
   std::random_device rd;  //Will be used to obtain a seed for the random number engine
 
   std::mt19937 rng(rd()); //Standard mersenne_twister_engine seeded with rd()
-  rng.seed(time(nullptr));
-  //rng.seed(1234);
+  //rng.seed(time(nullptr));
+  rng.seed(1234);
   std::uniform_int_distribution<unsigned int> imageWRange(2,width-2);
   std::uniform_int_distribution<unsigned int> imageHRange(2,height-2);
   std::uniform_int_distribution<int> walkDirection(-1,1);
 
-  for(unsigned int i=0; i<width*height; ++i)
-  {
-      map[i].set(255,255,255,255);
+  // clear screen to white (memset works here as I want to set all to 255)
+  memset(map.get(),  255, width*height*sizeof(uint32_t));
 
-  }
-
-#ifdef USEOMP
-  omp_lock_t writelock;
-  omp_init_lock(&writelock);
-#endif
   Vec2 walker;
   // set initial walker position
   walker.m_x=imageWRange(rng);
@@ -143,23 +130,16 @@ int main()
 	bool quit=false;
   bool pause=false;
 
-	// now we loop until the quit flag is set to true
-	while(!quit)
-	{
-    bool walking=true;
-#ifdef USEOMP
-  #pragma omp parallel for schedule(dynamic, 1) private(walker,r,walking)
-  for(int t=0; t<1; ++t)
-  {
-#endif
-    walking=true;
-    walker.m_x=imageWRange(rng);
-    walker.m_y=imageWRange(rng);
 
-    while(walking && !pause)
+  auto goWalking=[&map,&imageWRange,&imageHRange,&rng,&walkDirection]()
+  {
+    Vec2 walker;
+    bool walking=true;
+    walker.m_x=imageWRange(rng);
+    walker.m_y=imageHRange(rng);
+    while(walking)
     {
       // else move to a new point
-
       if(walker.m_x == 0 || walker.m_x == width-1 ||
          walker.m_y == 0 || walker.m_y == height-1 )
       {
@@ -173,52 +153,49 @@ int main()
     {
       for(int x=-1; x<=1; ++x)
       {
-          getPixel(walker.m_x+x,walker.m_y+y);
-          if(r==0)
+        size_t index=(width*(walker.m_y+y))+walker.m_x+x;
+        if(map[index].red()==0)
           {
-              // were adjacent so set the pixel to black
-#ifdef USEOMP
-            omp_set_lock(&writelock);
-#endif
-            setPixel(walker.m_x,walker.m_y,0,0,0);
-#ifdef USEOMP
-            omp_unset_lock(&writelock);
-#endif
-
-            // clear the red pixels
-                for(unsigned int cr=0; cr<width*height; ++cr)
-                {
-                    if(map[cr].red() == 255)
-                      map[cr].set(255,255,255,255);
-                 }
-              walking=false;
-              goto FinishedWalking;
-          }// end if black
+          // were adjacent so set the pixel to black
+          index=(width *walker.m_y)+walker.m_x;
+          #pragma omp critical
+          map[index].set(0,0,0,255);
+          // clear the red pixels
+          for(unsigned int cr=0; cr<width*height; ++cr)
+          {
+              if(map[cr].red() == 255)
+                map[cr].set(255,255,255,255);
+          }
+          walking=false;
+          goto FinishedWalking;
+         }// end if black
       }// end x loop
     } // end y loop
     // draw current pixel
-    setPixel(walker.m_x,walker.m_y,255,0,0);
+    size_t index=(width *walker.m_y)+walker.m_x;
+    map[index].set(255,0,0,255);
     // update walker dir
-      walker.m_x+=walkDirection(rng);
-      walker.m_y+=walkDirection(rng);
+    walker.m_x+=walkDirection(rng);
+    walker.m_y+=walkDirection(rng);
+   } // end while walking
+FinishedWalking : ;
 
-//    SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
-//    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+};
 
-//    // finally we need to tell SDL to update the screen
-//    SDL_RenderPresent(renderer);
-//    SDL_PollEvent(&event);
-    } // end while walking
-FinishedWalking :
-    walking=true;
-    walker.m_x=imageWRange(rng);
-    walker.m_y=imageWRange(rng);
+  int frames =0;
 
+  // now we loop until the quit flag is set to true
+	while(!quit)
+	{
 
-#ifdef USEOMP
-
-}
-#endif
+ #pragma omp parallel for schedule(dynamic, 1)
+   for(int t=0; t<12; ++t)
+    {
+      goWalking();
+    }
+    frames+=12;
+    if(frames == 12*1000)
+      writeImage("threaded.png",width,height,map.get());
     SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 
@@ -245,12 +222,8 @@ FinishedWalking :
           }// key
         } // end key down
       } // end process event
-		}
-	} // end processing loop
-#ifdef USEOMP
-  omp_destroy_lock(&writelock);
-#endif
-
+    }
+}
 	// finally when we are done we need to tidy up SDL by calling SDL_Quit
 	// sometime this is added as the atexit function to make it happen
 	// automatically
@@ -260,15 +233,23 @@ FinishedWalking :
 }
 
 
-
-//-----------------------------------------------------------------------------
-void clearScreen(SDL_Renderer *_ren,char _r,char _g,char _b	)
+bool writeImage(const std::string &_fname, int _w, int _h,void *pixels)
 {
-	SDL_SetRenderDrawColor(_ren, _r,_g,_b,255);
-	SDL_RenderClear(_ren);
+  using namespace OIIO;
+  std::unique_ptr<ImageOutput> out = ImageOutput::create (_fname);
+  if(!out)
+  {
+      std::cout<<"error with image\n";
+      return false;
+  }
+  bool success;
+  ImageSpec spec (_w,_h,1, TypeDesc::UINT32);
+  success=out->open(_fname,spec);
+  success=out->write_image(TypeDesc::UINT32,pixels);
+  success=out->close();
+  std::cout<<"Finished writing image "<<_w<<' '<<_h<<success<<'\n';
+  return success;
 }
-
-
 
 
 //-----------------------------------------------------------------------------
