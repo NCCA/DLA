@@ -13,9 +13,6 @@ to compile the program
 #include <iostream>
 #include <memory>
 #include <random>
-#ifdef USEOMP
-  #include <omp.h>
-#endif
 #include "RGBA.h"
 
 struct Vec2
@@ -50,38 +47,38 @@ void SDLErrorExit(const std::string &_msg);
 
 int main()
 {
-	//-----------------------------------------------------------------------------
-	// First thing we need to do is initialise SDL in this case we are
-	// setting up just the video subsystem if we need audio or timer etc
-	// we would | (or) the flags together see http://www.libsdl.org/intro.en/usinginit.html
-	// we check the return value and if not 0 it is an error
-	//-----------------------------------------------------------------------------
-	if (SDL_Init( SDL_INIT_VIDEO ) !=0)
-	{
-		SDLErrorExit("error initialising SDL");
-	}
-	//-----------------------------------------------------------------------------
-	// next we create a window and make sure it works
-	//-----------------------------------------------------------------------------
+  //-----------------------------------------------------------------------------
+  // First thing we need to do is initialise SDL in this case we are
+  // setting up just the video subsystem if we need audio or timer etc
+  // we would | (or) the flags together see http://www.libsdl.org/intro.en/usinginit.html
+  // we check the return value and if not 0 it is an error
+  //-----------------------------------------------------------------------------
+  if (SDL_Init( SDL_INIT_VIDEO ) !=0)
+  {
+    SDLErrorExit("error initialising SDL");
+  }
+  //-----------------------------------------------------------------------------
+  // next we create a window and make sure it works
+  //-----------------------------------------------------------------------------
   SDL_Window *win = nullptr;
   win = SDL_CreateWindow("DLA", 100, 100, width, height, SDL_WINDOW_SHOWN);
   if (win == nullptr)
-	{
-			SDLErrorExit("Error creating Window");
-	}
-	//-----------------------------------------------------------------------------
-	// now we associate a renderer with the window
-	//-----------------------------------------------------------------------------
+  {
+      SDLErrorExit("Error creating Window");
+  }
+  //-----------------------------------------------------------------------------
+  // now we associate a renderer with the window
+  //-----------------------------------------------------------------------------
   SDL_Renderer *renderer = nullptr;
-	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (renderer == nullptr)
-	{
-		SDLErrorExit("error creating renderer");
-	}
+  {
+    SDLErrorExit("error creating renderer");
+  }
   auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height);
 
-	clearScreen(renderer,0,0,0);
-	SDL_RenderPresent(renderer);
+  clearScreen(renderer,0,0,0);
+  SDL_RenderPresent(renderer);
 //  std::unique_ptr<unsigned char []> map=std::make_unique<unsigned char []>(width*height*3);
   std::unique_ptr<RGBA []> map=std::make_unique<RGBA []>(width*height);
 
@@ -103,8 +100,8 @@ int main()
   std::random_device rd;  //Will be used to obtain a seed for the random number engine
 
   std::mt19937 rng(rd()); //Standard mersenne_twister_engine seeded with rd()
-  rng.seed(time(nullptr));
-  //rng.seed(1234);
+  //rng.seed(time(nullptr));
+  rng.seed(1234);
   std::uniform_int_distribution<unsigned int> imageWRange(2,width-2);
   std::uniform_int_distribution<unsigned int> imageHRange(2,height-2);
   std::uniform_int_distribution<int> walkDirection(-1,1);
@@ -115,10 +112,7 @@ int main()
 
   }
 
-#ifdef USEOMP
-  omp_lock_t writelock;
-  omp_init_lock(&writelock);
-#endif
+
   Vec2 walker;
   // set initial walker position
   walker.m_x=imageWRange(rng);
@@ -137,22 +131,16 @@ int main()
   {
 
   setPixel(i,height/2,0,0,0);
+//  std::cout<<"Seed Pixel "<<sX<<' '<<sY<<'\n';
   }
 */
   SDL_Event event;
-	bool quit=false;
+  bool quit=false;
   bool pause=false;
-
-	// now we loop until the quit flag is set to true
-	while(!quit)
-	{
-    bool walking=true;
-#ifdef USEOMP
-  #pragma omp parallel for schedule(dynamic, 1) private(walker,r,walking)
-  for(int t=0; t<1; ++t)
+  // now we loop until the quit flag is set to true
+  while(!quit)
   {
-#endif
-    walking=true;
+    bool walking=true;
     walker.m_x=imageWRange(rng);
     walker.m_y=imageWRange(rng);
 
@@ -177,15 +165,8 @@ int main()
           if(r==0)
           {
               // were adjacent so set the pixel to black
-#ifdef USEOMP
-            omp_set_lock(&writelock);
-#endif
-            setPixel(walker.m_x,walker.m_y,0,0,0);
-#ifdef USEOMP
-            omp_unset_lock(&writelock);
-#endif
-
-            // clear the red pixels
+              setPixel(walker.m_x,walker.m_y,0,0,0);
+              // clear the red pixels
                 for(unsigned int cr=0; cr<width*height; ++cr)
                 {
                     if(map[cr].red() == 255)
@@ -209,54 +190,43 @@ int main()
 //    SDL_RenderPresent(renderer);
 //    SDL_PollEvent(&event);
     } // end while walking
-FinishedWalking :
-    walking=true;
-    walker.m_x=imageWRange(rng);
-    walker.m_y=imageWRange(rng);
 
-
-#ifdef USEOMP
-
-}
-#endif
+  FinishedWalking : ;
     SDL_UpdateTexture(texture,nullptr,map.get(),width*sizeof(unsigned int));
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 
     // finally we need to tell SDL to update the screen
     SDL_RenderPresent(renderer);
 
-		// process SDL events, in this case we are looking for keys
-		while ( SDL_PollEvent(&event) )
-		{
-			switch (event.type)
-			{
-				// this is the window x being clicked.
-				case SDL_QUIT : quit = true; break;
+    // process SDL events, in this case we are looking for keys
+    while ( SDL_PollEvent(&event) )
+    {
+      switch (event.type)
+      {
+        // this is the window x being clicked.
+        case SDL_QUIT : quit = true; break;
 
-				// now we look for a keydown event
-				case SDL_KEYDOWN:
-				{
-					switch( event.key.keysym.sym )
-					{
-						// if it's the escape key quit
-						case SDLK_ESCAPE :  quit = true; break;
+        // now we look for a keydown event
+        case SDL_KEYDOWN:
+        {
+          switch( event.key.keysym.sym )
+          {
+            // if it's the escape key quit
+            case SDLK_ESCAPE :  quit = true; break;
             case SDLK_SPACE : pause^=true; break;
             default : break;
           }// key
         } // end key down
       } // end process event
-		}
-	} // end processing loop
-#ifdef USEOMP
-  omp_destroy_lock(&writelock);
-#endif
+    }
+  } // end processing loop
 
-	// finally when we are done we need to tidy up SDL by calling SDL_Quit
-	// sometime this is added as the atexit function to make it happen
-	// automatically
-	SDL_Quit();
+  // finally when we are done we need to tidy up SDL by calling SDL_Quit
+  // sometime this is added as the atexit function to make it happen
+  // automatically
+  SDL_Quit();
 
-	return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }
 
 
@@ -264,8 +234,8 @@ FinishedWalking :
 //-----------------------------------------------------------------------------
 void clearScreen(SDL_Renderer *_ren,char _r,char _g,char _b	)
 {
-	SDL_SetRenderDrawColor(_ren, _r,_g,_b,255);
-	SDL_RenderClear(_ren);
+  SDL_SetRenderDrawColor(_ren, _r,_g,_b,255);
+  SDL_RenderClear(_ren);
 }
 
 
